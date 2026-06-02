@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tree Clock</title>
+    <style>
+        :root {
+            --bg-color: #F4F1EA;       /* 溫潤米白 */
+            --text-main: #2D4A43;      /* 深森林綠 */
+            --text-sub: #6A7B76;       /* 迷霧綠灰 */
+            --accent-sand: #E6DFD3;    /* 暖沙色 */
+            --accent-sage: #A3B19B;    /* 鼠尾草綠 */
+            --accent-flow: #7D9D94;    /* 心流青綠 */
+            --card-bg: #FFFFFF;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+            transition: background-color 0.5s ease;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 420px;
+            text-align: center;
+            background: var(--card-bg);
+            padding: 40px 30px;
+            border-radius: 24px;
+            box-shadow: 0 8px 30px rgba(45, 74, 67, 0.05);
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            font-weight: 500;
+            letter-spacing: 0.05em;
+            margin-bottom: 8px;
+            color: var(--text-main);
+        }
+
+        .tagline {
+            font-size: 0.9rem;
+            color: var(--text-sub);
+            margin-bottom: 40px;
+        }
+
+        /* 狀態標籤 */
+        .status-badge {
+            display: inline-block;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            background-color: var(--accent-sand);
+            color: var(--text-main);
+            margin-bottom: 20px;
+            transition: all 0.5s ease;
+        }
+
+        /* 計時器數字 */
+        .timer-display {
+            font-size: 4.5rem;
+            font-weight: 300;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -0.02em;
+            margin-bottom: 40px;
+            color: var(--text-main);
+        }
+
+        /* 按鈕樣式 */
+        .btn {
+            width: 100%;
+            padding: 16px;
+            border: none;
+            border-radius: 16px;
+            font-size: 1.1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            outline: none;
+            box-shadow: 0 4px 12px rgba(45, 74, 67, 0.08);
+        }
+
+        .btn-primary {
+            background-color: var(--text-main);
+            color: #FFFFFF;
+        }
+
+        .btn-primary:hover {
+            background-color: #1E332E;
+        }
+
+        .btn-secondary {
+            background-color: var(--accent-sand);
+            color: var(--text-main);
+            margin-top: 12px;
+        }
+
+        .btn-secondary:hover {
+            background-color: #DBD3C5;
+        }
+
+        .btn-alarm {
+            background-color: #C27D74;
+            color: white;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.02); box-shadow: 0 4px 20px rgba(194, 125, 116, 0.4); }
+            100% { transform: scale(1); }
+        }
+
+        /* 數據統計面板 */
+        .stats-panel {
+            margin-top: 40px;
+            border-top: 1px solid #EFECE6;
+            padding-top: 24px;
+            display: flex;
+            justify-content: space-around;
+        }
+
+        .stat-box {
+            flex: 1;
+        }
+
+        .stat-val {
+            font-size: 1.4rem;
+            font-weight: 500;
+            color: var(--text-main);
+        }
+
+        .stat-lbl {
+            font-size: 0.8rem;
+            color: var(--text-sub);
+            margin-top: 4px;
+        }
+
+        /* 今日歷史紀錄明細 */
+        .history-section {
+            margin-top: 24px;
+            border-top: 1px dashed #EFECE6;
+            padding-top: 20px;
+            text-align: left;
+        }
+
+        .history-title {
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--text-sub);
+            margin-bottom: 12px;
+            text-align: center;
+            letter-spacing: 0.05em;
+        }
+
+        .history-list {
+            list-style: none;
+            max-height: 140px;
+            overflow-y: auto;
+            padding: 0 4px;
+        }
+
+        .history-item {
+            font-size: 0.85rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 0;
+            border-bottom: 1px solid #FDFDFD;
+            color: var(--text-main);
+        }
+
+        .history-time {
+            font-variant-numeric: tabular-nums;
+            font-weight: 500;
+        }
+
+        .history-detail {
+            color: var(--text-sub);
+            font-size: 0.8rem;
+        }
+
+        /* 隱藏元素 */
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Tree Clock</h1>
+
+        <div id="statusBadge" class="status-badge">準備專注</div>
+        <div id="timerDisplay" class="timer-display">00:00</div>
+
+        <button id="btnStartFocus" class="btn btn-primary">開始專注</button>
+        <button id="btnEndFocus" class="btn btn-secondary hidden">結束專注</button>
+        <button id="btnStopAlarm" class="btn btn-alarm hidden">關閉提示 / 新專注</button>
+        <button id="btnSkipBreak" class="btn btn-secondary hidden">跳過休息</button>
+
+        <div class="stats-panel">
+            <div class="stat-box">
+                <div id="todayFocus" class="stat-val">0<span>m</span></div>
+                <div class="stat-lbl">今日專注</div>
+            </div>
+            <div class="stat-box">
+                <div id="todayFlow" class="stat-val">0<span>m</span></div>
+                <div class="stat-lbl">今日心流</div>
+            </div>
+        </div>
+
+        <div class="history-section">
+            <div class="history-title">— 今日專注紀錄 —</div>
+            <ul id="historyList" class="history-list">
+                </ul>
+        </div>
+    </div>
+
+    <script>
+        // --- 狀態定義 ---
+        const STATE = {
+            IDLE: 'IDLE',
+            FOCUS: 'FOCUS',
+            BREAK: 'BREAK',
+            ALARM: 'ALARM'
+        };
+
+        let currentState = STATE.IDLE;
+        let startTime = null;           // 用於計算當前階段已過去的總秒數
+        let sessionStartDateTime = null;// 用於紀錄歷史明細的起始時間 (Date 物件)
+        let elapsedSeconds = 0; 
+        let breakTotalSeconds = 0;
+        let timerWorker = null;
+        let audioCtx = null;
+        let alarmInterval = null;
+
+        // --- DOM 元素 ---
+        const statusBadge = document.getElementById('statusBadge');
+        const timerDisplay = document.getElementById('timerDisplay');
+        const btnStartFocus = document.getElementById('btnStartFocus');
+        const btnEndFocus = document.getElementById('btnEndFocus');
+        const btnStopAlarm = document.getElementById('btnStopAlarm');
+        const btnSkipBreak = document.getElementById('btnSkipBreak');
+        const todayFocusEl = document.getElementById('todayFocus');
+        const todayFlowEl = document.getElementById('todayFlow');
+        const historyListEl = document.getElementById('historyList');
+
+        // --- 初始化 Web Worker (以 Blob 方式內嵌防 Safari 背景暫停) ---
+        const workerCode = `
+            let timerId = null;
+            self.onmessage = function(e) {
+                if (e.data === 'start') {
+                    if (timerId) clearInterval(timerId);
+                    timerId = setInterval(() => { self.postMessage('tick'); }, 1000);
+                } else if (e.data === 'stop') {
+                    clearInterval(timerId);
+                    timerId = null;
+                }
+            };
+        `;
+        const blob = new Blob([workerCode], { type: 'application/javascript' });
+        timerWorker = new Worker(URL.createObjectURL(blob));
+        timerWorker.onmessage = function() {
+            handleTick();
+        };
+
+        // --- Safari 音訊解鎖與 Web Audio API ---
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function playNaturalChime() {
+            if (!audioCtx) return;
+            const now = audioCtx.currentTime;
+            triggerTone(392.00, now, 0.15);      // G4
+            triggerTone(523.25, now + 0.1, 0.15); // C5
+            triggerTone(659.25, now + 0.2, 0.2);  // E5
+            triggerTone(783.99, now + 0.3, 0.4);  // G5
+        }
+
+        function triggerTone(freq, time, duration) {
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, time);
+            gainNode.gain.setValueAtTime(0.15, time);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, time + duration);
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            osc.start(time);
+            osc.stop(time + duration);
+        }
+
+        function startAlarmLoop() {
+            playNaturalChime();
+            alarmInterval = setInterval(playNaturalChime, 2500);
+        }
+
+        function stopAlarmLoop() {
+            if (alarmInterval) {
+                clearInterval(alarmInterval);
+                alarmInterval = null;
+            }
+        }
+
+        // --- 核心計時邏輯 ---
+        function handleTick() {
+            const now = Date.now();
+            
+            if (currentState === STATE.FOCUS) {
+                elapsedSeconds = Math.floor((now - startTime) / 1000);
+                updateFocusUI();
+            } else if (currentState === STATE.BREAK) {
+                const totalElapsed = Math.floor((now - startTime) / 1000);
+                const remaining = breakTotalSeconds - totalElapsed;
+                
+                if (remaining <= 0) {
+                    transitionToAlarm();
+                } else {
+                    displayTime(remaining);
+                }
+            }
+        }
+
+        function updateFocusUI() {
+            displayTime(elapsedSeconds);
+            const minutes = elapsedSeconds / 60;
+
+            if (minutes < 8) {
+                statusBadge.innerText = '蓄力期';
+                statusBadge.style.backgroundColor = 'var(--accent-sand)';
+                statusBadge.style.color = 'var(--text-main)';
+                document.body.style.backgroundColor = '#F4F1EA';
+            } else if (minutes >= 8 && minutes < 25) {
+                statusBadge.innerText = '專注期';
+                statusBadge.style.backgroundColor = 'var(--accent-sage)';
+                statusBadge.style.color = 'var(--text-main)';
+                document.body.style.backgroundColor = '#ECEFEA';
+            } else {
+                statusBadge.innerText = '心流期';
+                statusBadge.style.backgroundColor = 'var(--accent-flow)';
+                statusBadge.style.color = '#FFFFFF';
+                document.body.style.backgroundColor = '#E5ECE9';
+            }
+        }
+
+        function displayTime(totalSecs) {
+            const hrs = Math.floor(totalSecs / 3600);
+            const mins = Math.floor((totalSecs % 3600) / 60);
+            const secs = totalSecs % 60;
+
+            let timeStr = "";
+            if (hrs > 0) {
+                timeStr += `${String(hrs).padStart(2, '0')}:`;
+            }
+            timeStr += `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+            timerDisplay.innerText = timeStr;
+        }
+
+        // --- 狀態轉換控制 ---
+        function startFocus() {
+            initAudio();
+            currentState = STATE.FOCUS;
+            startTime = Date.now();
+            sessionStartDateTime = new Date(); // 紀錄本次專注開始時間
+            elapsedSeconds = 0;
+
+            btnStartFocus.classList.add('hidden');
+            btnEndFocus.classList.remove('hidden');
+            btnStopAlarm.classList.add('hidden');
+            btnSkipBreak.classList.add('hidden');
+
+            timerWorker.postMessage('start');
+            updateFocusUI();
+        }
+
+        function endFocus() {
+            initAudio();
+            timerWorker.postMessage('stop'); // 暫時先暫停計時器
+            
+            const totalMinutes = elapsedSeconds / 60;
+
+            // 1. 蓄力期防呆與取消機制
+            if (totalMinutes < 8) {
+                const proceed = confirm("目前處於蓄力期（未滿 8 分鐘），結束將不計入任何時間。\n\n確定要放棄並結束嗎？\n點擊「取消」可返回繼續蓄力。");
+                if (!proceed) {
+                    // 使用者點擊取消 -> 恢復專注狀態與計時
+                    currentState = STATE.FOCUS;
+                    timerWorker.postMessage('start');
+                    return;
+                }
+                resetToIdle();
+            } else {
+                // 2. 正常結束，紀錄數據（傳入開始與結束時間物件）
+                const sessionEndDateTime = new Date();
+                recordStats(totalMinutes, sessionStartDateTime, sessionEndDateTime);
+                
+                // 計算休息時間
+                let breakMinutes = 5;
+                if (totalMinutes > 25) {
+                    breakMinutes += Math.floor((totalMinutes - 0.001) / 25) * 5;
+                }
+                
+                startBreak(breakMinutes);
+            }
+        }
+
+        function startBreak(minutes) {
+            currentState = STATE.BREAK;
+            breakTotalSeconds = minutes * 60;
+            startTime = Date.now();
+
+            statusBadge.innerText = `休息中 (${minutes}m)`;
+            statusBadge.style.backgroundColor = 'var(--accent-sand)';
+            statusBadge.style.color = 'var(--text-main)';
+            document.body.style.backgroundColor = '#F4F1EA';
+
+            btnEndFocus.classList.add('hidden');
+            btnSkipBreak.classList.remove('hidden');
+
+            displayTime(breakTotalSeconds);
+            timerWorker.postMessage('start');
+        }
+
+        function transitionToAlarm() {
+            timerWorker.postMessage('stop');
+            currentState = STATE.ALARM;
+
+            statusBadge.innerText = '休息結束！';
+            statusBadge.style.backgroundColor = '#C27D74';
+            statusBadge.style.color = '#FFFFFF';
+            document.body.style.backgroundColor = '#F7ECEB';
+            timerDisplay.innerText = "00:00";
+
+            btnSkipBreak.classList.add('hidden');
+            btnStopAlarm.classList.remove('hidden');
+
+            startAlarmLoop();
+        }
+
+        function resetToIdle() {
+            stopAlarmLoop();
+            timerWorker.postMessage('stop');
+            currentState = STATE.IDLE;
+
+            statusBadge.innerText = '準備專注';
+            statusBadge.style.backgroundColor = 'var(--accent-sand)';
+            statusBadge.style.color = 'var(--text-main)';
+            document.body.style.backgroundColor = '#F4F1EA';
+            timerDisplay.innerText = "00:00";
+
+            btnStartFocus.classList.remove('hidden');
+            btnEndFocus.classList.add('hidden');
+            btnStopAlarm.classList.add('hidden');
+            btnSkipBreak.classList.add('hidden');
+        }
+
+        // --- 輔助函式：將 Date 物件格式化為 HH:MM ---
+        function formatTimeHM(dateObj) {
+            const h = String(dateObj.getHours()).padStart(2, '0');
+            const m = String(dateObj.getMinutes()).padStart(2, '0');
+            return `${h}:${m}`;
+        }
+
+        function getTodayKey() {
+            const d = new Date();
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+
+        // --- 統計數據與歷史明細處理 (LocalStorage) ---
+        function recordStats(totalMins, startTimeObj, endTimeObj) {
+            const today = getTodayKey();
+            let stats = JSON.parse(localStorage.getItem('tree_clock_data')) || {};
+
+            if (!stats[today]) {
+                stats[today] = { focus: 0, flow: 0, history: [] };
+            }
+            if (!stats[today].history) {
+                stats[today].history = [];
+            }
+
+            let fTime = 0;
+            let flTime = 0;
+
+            if (totalMins <= 25) {
+                fTime = totalMins;
+            } else {
+                fTime = 25;
+                flTime = (totalMins - 25);
+            }
+
+            stats[today].focus += fTime;
+            stats[today].flow += flTime;
+
+            // 格式化本次的起始與結束時間
+            const startStr = formatTimeHM(startTimeObj);
+            const endStr = formatTimeHM(endTimeObj);
+
+            // 儲存至歷史清單
+            stats[today].history.push({
+                start: startStr,
+                end: endStr,
+                focus: Math.round(fTime),
+                flow: Math.round(flTime)
+            });
+
+            localStorage.setItem('tree_clock_data', JSON.stringify(stats));
+            loadAndRenderStats();
+        }
+
+        function loadAndRenderStats() {
+            const today = getTodayKey();
+            const stats = JSON.parse(localStorage.getItem('tree_clock_data')) || {};
+            const todayData = stats[today] || { focus: 0, flow: 0, history: [] };
+            
+            // 渲染累積總量
+            todayFocusEl.innerHTML = `${Math.round(todayData.focus)}<span>m</span>`;
+            todayFlowEl.innerHTML = `${Math.round(todayData.flow)}<span>m</span>`;
+
+            // 渲染今日歷史明細紀錄 (最新完成的在最上面)
+            historyListEl.innerHTML = '';
+            const history = todayData.history || [];
+            
+            if (history.length === 0) {
+                historyListEl.innerHTML = '<div style="text-align:center; font-size:0.8rem; color:var(--text-sub); padding: 12px 0;">尚未建立今日紀錄</div>';
+            } else {
+                [...history].reverse().forEach(item => {
+                    const li = document.createElement('li');
+                    li.className = 'history-item';
+                    
+                    let label = `專注 ${item.focus}m`;
+                    if (item.flow > 0) {
+                        label += ` + 心流 ${item.flow}m`;
+                    }
+                    
+                    li.innerHTML = `
+                        <span class="history-time">⏱️ ${item.start} - ${item.end}</span>
+                        <span class="history-detail">${label}</span>
+                    `;
+                    historyListEl.appendChild(li);
+                });
+            }
+        }
+
+        // --- 事件綁定 ---
+        btnStartFocus.addEventListener('click', startFocus);
+        btnEndFocus.addEventListener('click', endFocus);
+        btnSkipBreak.addEventListener('click', resetToIdle);
+        btnStopAlarm.addEventListener('click', () => {
+            resetToIdle();
+            startFocus(); // 一鍵開始下一輪
+        });
+
+        // 頁面初次載入
+        loadAndRenderStats();
+    </script>
+</body>
+</html>

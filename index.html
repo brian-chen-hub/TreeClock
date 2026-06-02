@@ -145,10 +145,12 @@
             color: var(--text-main);
         }
 
-        .stat-lbl {
-            font-size: 0.8rem;
+        .stat-val span {
+            font-size: 0.85rem;
             color: var(--text-sub);
-            margin-top: 4px;
+            font-weight: 400;
+            margin-left: 2px;
+            margin-right: 4px;
         }
 
         /* 今日歷史紀錄明細 */
@@ -242,8 +244,8 @@
         };
 
         let currentState = STATE.IDLE;
-        let startTime = null;           // 用於計算當前階段已過去的總秒數
-        let sessionStartDateTime = null;// 用於紀錄歷史明細的起始時間 (Date 物件)
+        let startTime = null;           
+        let sessionStartDateTime = null;
         let elapsedSeconds = 0; 
         let breakTotalSeconds = 0;
         let timerWorker = null;
@@ -383,7 +385,7 @@
             initAudio();
             currentState = STATE.FOCUS;
             startTime = Date.now();
-            sessionStartDateTime = new Date(); // 紀錄本次專注開始時間
+            sessionStartDateTime = new Date(); 
             elapsedSeconds = 0;
 
             btnStartFocus.classList.add('hidden');
@@ -397,26 +399,22 @@
 
         function endFocus() {
             initAudio();
-            timerWorker.postMessage('stop'); // 暫時先暫停計時器
+            timerWorker.postMessage('stop'); 
             
             const totalMinutes = elapsedSeconds / 60;
 
-            // 1. 蓄力期防呆與取消機制
             if (totalMinutes < 8) {
-                const proceed = confirm("目前處於蓄力期（未滿 8 分鐘），結束將不計入任何時間。\n\n確定要放棄並結束嗎？\n點擊「取消」可返回繼續蓄力。");
+                const proceed = confirm("目前處於蓄力期(未滿 8 分鐘)，結束將不計入任何時間。\n\n確定要放棄並結束嗎？\n點擊「取消」可返回繼續蓄力。");
                 if (!proceed) {
-                    // 使用者點擊取消 -> 恢復專注狀態與計時
                     currentState = STATE.FOCUS;
                     timerWorker.postMessage('start');
                     return;
                 }
                 resetToIdle();
             } else {
-                // 2. 正常結束，紀錄數據（傳入開始與結束時間物件）
                 const sessionEndDateTime = new Date();
                 recordStats(totalMinutes, sessionStartDateTime, sessionEndDateTime);
                 
-                // 計算休息時間
                 let breakMinutes = 5;
                 if (totalMinutes > 25) {
                     breakMinutes += Math.floor((totalMinutes - 0.001) / 25) * 5;
@@ -476,7 +474,29 @@
             btnSkipBreak.classList.add('hidden');
         }
 
-        // --- 輔助函式：將 Date 物件格式化為 HH:MM ---
+        // --- 時間格式化工具：超過 60 分鐘進位成小時 ---
+        // 用於面板 HTML 渲染 (帶有 span 樣式)
+        function formatMinutesToHTML(totalMins) {
+            const mins = Math.round(totalMins);
+            if (mins >= 60) {
+                const hrs = Math.floor(mins / 60);
+                const remMins = mins % 60;
+                return `${hrs}<span>h</span> ${remMins}<span>m</span>`;
+            }
+            return `${mins}<span>m</span>`;
+        }
+
+        // 用於純文字清單顯示
+        function formatMinutesToText(totalMins) {
+            const mins = Math.round(totalMins);
+            if (mins >= 60) {
+                const hrs = Math.floor(mins / 60);
+                const remMins = mins % 60;
+                return remMins > 0 ? `${hrs}h ${remMins}m` : `${hrs}h`;
+            }
+            return `${mins}m`;
+        }
+
         function formatTimeHM(dateObj) {
             const h = String(dateObj.getHours()).padStart(2, '0');
             const m = String(dateObj.getMinutes()).padStart(2, '0');
@@ -488,7 +508,7 @@
             return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         }
 
-        // --- 統計數據與歷史明細處理 (LocalStorage) ---
+        // --- 統計數據與歷史明細處理 ---
         function recordStats(totalMins, startTimeObj, endTimeObj) {
             const today = getTodayKey();
             let stats = JSON.parse(localStorage.getItem('tree_clock_data')) || {};
@@ -513,11 +533,9 @@
             stats[today].focus += fTime;
             stats[today].flow += flTime;
 
-            // 格式化本次的起始與結束時間
             const startStr = formatTimeHM(startTimeObj);
             const endStr = formatTimeHM(endTimeObj);
 
-            // 儲存至歷史清單
             stats[today].history.push({
                 start: startStr,
                 end: endStr,
@@ -534,11 +552,11 @@
             const stats = JSON.parse(localStorage.getItem('tree_clock_data')) || {};
             const todayData = stats[today] || { focus: 0, flow: 0, history: [] };
             
-            // 渲染累積總量
-            todayFocusEl.innerHTML = `${Math.round(todayData.focus)}<span>m</span>`;
-            todayFlowEl.innerHTML = `${Math.round(todayData.flow)}<span>m</span>`;
+            // 使用新格式化工具：超過 60 分鐘自動渲染為 Xh Ym
+            todayFocusEl.innerHTML = formatMinutesToHTML(todayData.focus);
+            todayFlowEl.innerHTML = formatMinutesToHTML(todayData.flow);
 
-            // 渲染今日歷史明細紀錄 (最新完成的在最上面)
+            // 渲染歷史明細
             historyListEl.innerHTML = '';
             const history = todayData.history || [];
             
@@ -549,9 +567,9 @@
                     const li = document.createElement('li');
                     li.className = 'history-item';
                     
-                    let label = `專注 ${item.focus}m`;
+                    let label = `專注 ${formatMinutesToText(item.focus)}`;
                     if (item.flow > 0) {
-                        label += ` + 心流 ${item.flow}m`;
+                        label += ` + 心流 ${formatMinutesToText(item.flow)}`;
                     }
                     
                     li.innerHTML = `
@@ -569,10 +587,9 @@
         btnSkipBreak.addEventListener('click', resetToIdle);
         btnStopAlarm.addEventListener('click', () => {
             resetToIdle();
-            startFocus(); // 一鍵開始下一輪
+            startFocus();
         });
 
-        // 頁面初次載入
         loadAndRenderStats();
     </script>
 </body>

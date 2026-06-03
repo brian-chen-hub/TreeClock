@@ -6,13 +6,29 @@
     <title>Tree Clock</title>
     <style>
         :root {
-            --bg-color: #F4F1EA;       /* 溫潤米白 */
+            /* 基礎與卡片顏色 */
             --text-main: #2D4A43;      /* 深森林綠 */
             --text-sub: #6A7B76;       /* 迷霧綠灰 */
-            --accent-sand: #E6DFD3;    /* 暖沙色 */
-            --accent-sage: #A3B19B;    /* 鼠尾草綠 */
-            --accent-flow: #7D9D94;    /* 心流青綠 */
             --card-bg: #FFFFFF;
+
+            /* 各階段專屬動態配色（背景色 / 標籤色） */
+            --bg-idle: #F7F5F0;        /* 初始/準備：暖米白 */
+            --badge-idle: #E3DEC3;
+
+            --bg-storage: #FFF9EE;     /* 蓄力期：柔和淡黃 */
+            --badge-storage: #EAD0A8;
+
+            --bg-focus: #EBF2EB;       /* 專注期：清新草木綠 */
+            --badge-focus: #8FA382;
+
+            --bg-flow: #DCEBE6;        /* 心流期：深邃青綠 */
+            --badge-flow: #4D8071;
+
+            --bg-break: #EDF2F7;       /* 休息期：靜謐冰藍 */
+            --badge-break: #7AA0C9;
+
+            --bg-alarm: #FAF0F0;       /* 鬧鈴響起：淡粉紅 */
+            --badge-alarm: #C97A7A;
         }
 
         * {
@@ -23,7 +39,7 @@
         }
 
         body {
-            background-color: var(--bg-color);
+            background-color: var(--bg-idle);
             color: var(--text-main);
             display: flex;
             flex-direction: column;
@@ -31,7 +47,7 @@
             justify-content: center;
             min-height: 100vh;
             padding: 20px;
-            transition: background-color 0.5s ease;
+            transition: background-color 0.6s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .container {
@@ -41,39 +57,34 @@
             background: var(--card-bg);
             padding: 40px 30px;
             border-radius: 24px;
-            box-shadow: 0 8px 30px rgba(45, 74, 67, 0.05);
+            box-shadow: 0 12px 40px rgba(45, 74, 67, 0.04);
         }
 
         h1 {
-            font-size: 1.8rem;
+            font-size: 2rem;
             font-weight: 500;
-            letter-spacing: 0.05em;
-            margin-bottom: 8px;
+            letter-spacing: 0.08em;
+            margin-bottom: 30px;
             color: var(--text-main);
-        }
-
-        .tagline {
-            font-size: 0.9rem;
-            color: var(--text-sub);
-            margin-bottom: 40px;
         }
 
         /* 狀態標籤 */
         .status-badge {
             display: inline-block;
-            padding: 6px 16px;
+            padding: 8px 20px;
             border-radius: 20px;
             font-size: 0.9rem;
-            font-weight: 500;
-            background-color: var(--accent-sand);
+            font-weight: 600;
+            background-color: var(--badge-idle);
             color: var(--text-main);
-            margin-bottom: 20px;
+            margin-bottom: 25px;
             transition: all 0.5s ease;
+            letter-spacing: 0.05em;
         }
 
         /* 計時器數字 */
         .timer-display {
-            font-size: 4.5rem;
+            font-size: 4.8rem;
             font-weight: 300;
             font-variant-numeric: tabular-nums;
             letter-spacing: -0.02em;
@@ -105,7 +116,7 @@
         }
 
         .btn-secondary {
-            background-color: var(--accent-sand);
+            background-color: #E6DFD3;
             color: var(--text-main);
             margin-top: 12px;
         }
@@ -151,6 +162,12 @@
             font-weight: 400;
             margin-left: 2px;
             margin-right: 4px;
+        }
+
+        .stat-lbl {
+            font-size: 0.8rem;
+            color: var(--text-sub);
+            margin-top: 4px;
         }
 
         /* 今日歷史紀錄明細 */
@@ -249,8 +266,12 @@
         let elapsedSeconds = 0; 
         let breakTotalSeconds = 0;
         let timerWorker = null;
+        
+        // 音訊控制變數
         let audioCtx = null;
         let alarmInterval = null;
+        let keepAliveOsc = null;
+        let keepAliveGain = null;
 
         // --- DOM 元素 ---
         const statusBadge = document.getElementById('statusBadge');
@@ -263,7 +284,7 @@
         const todayFlowEl = document.getElementById('todayFlow');
         const historyListEl = document.getElementById('historyList');
 
-        // --- 初始化 Web Worker (以 Blob 方式內嵌防 Safari 背景暫停) ---
+        // --- 初始化 Web Worker (防 Safari 背景暫停) ---
         const workerCode = `
             let timerId = null;
             self.onmessage = function(e) {
@@ -282,7 +303,7 @@
             handleTick();
         };
 
-        // --- Safari 音訊解鎖與 Web Audio API ---
+        // --- Safari/iPadOS 音訊解鎖與建置 ---
         function initAudio() {
             if (!audioCtx) {
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -292,9 +313,36 @@
             }
         }
 
+        // iPadOS 關鍵修復：在倒數階段持續播放極微弱的 sub-audible 訊號，防止 iOS 睡眠關閉網頁音訊通道
+        function startAudioKeepAlive() {
+            if (!audioCtx) return;
+            try {
+                stopAudioKeepAlive(); // 確保不重複建立
+                keepAliveOsc = audioCtx.createOscillator();
+                keepAliveGain = audioCtx.createGain();
+                
+                keepAliveOsc.frequency.setValueAtTime(1, audioCtx.currentTime); // 1Hz 超低頻
+                keepAliveGain.gain.setValueAtTime(0.0001, audioCtx.currentTime); // 極低音量，實測完全靜音但能保持通道 active
+                
+                keepAliveOsc.connect(keepAliveGain);
+                keepAliveGain.connect(audioCtx.destination);
+                keepAliveOsc.start();
+            } catch(e) {
+                console.log("Keep-alive active node failed:", e);
+            }
+        }
+
+        function stopAudioKeepAlive() {
+            if (keepAliveOsc) {
+                try { keepAliveOsc.stop(); } catch(e){}
+                keepAliveOsc = null;
+            }
+        }
+
         function playNaturalChime() {
             if (!audioCtx) return;
             const now = audioCtx.currentTime;
+            // 播放清脆的和弦自然聲音
             triggerTone(392.00, now, 0.15);      // G4
             triggerTone(523.25, now + 0.1, 0.15); // C5
             triggerTone(659.25, now + 0.2, 0.2);  // E5
@@ -306,7 +354,7 @@
             const gainNode = audioCtx.createGain();
             osc.type = 'sine';
             osc.frequency.setValueAtTime(freq, time);
-            gainNode.gain.setValueAtTime(0.15, time);
+            gainNode.gain.setValueAtTime(0.18, time);
             gainNode.gain.exponentialRampToValueAtTime(0.001, time + duration);
             osc.connect(gainNode);
             gainNode.connect(audioCtx.destination);
@@ -315,8 +363,9 @@
         }
 
         function startAlarmLoop() {
+            stopAlarmLoop();
             playNaturalChime();
-            alarmInterval = setInterval(playNaturalChime, 2500);
+            alarmInterval = setInterval(playNaturalChime, 2500); // 每 2.5 秒輪播提示
         }
 
         function stopAlarmLoop() {
@@ -326,7 +375,7 @@
             }
         }
 
-        // --- 核心計時邏輯 ---
+        // --- 核心計時與 UI 配色變更邏輯 ---
         function handleTick() {
             const now = Date.now();
             
@@ -351,19 +400,19 @@
 
             if (minutes < 8) {
                 statusBadge.innerText = '蓄力期';
-                statusBadge.style.backgroundColor = 'var(--accent-sand)';
+                statusBadge.style.backgroundColor = 'var(--badge-storage)';
                 statusBadge.style.color = 'var(--text-main)';
-                document.body.style.backgroundColor = '#F4F1EA';
+                document.body.style.backgroundColor = 'var(--bg-storage)';
             } else if (minutes >= 8 && minutes < 25) {
                 statusBadge.innerText = '專注期';
-                statusBadge.style.backgroundColor = 'var(--accent-sage)';
-                statusBadge.style.color = 'var(--text-main)';
-                document.body.style.backgroundColor = '#ECEFEA';
+                statusBadge.style.backgroundColor = 'var(--badge-focus)';
+                statusBadge.style.color = '#FFFFFF';
+                document.body.style.backgroundColor = 'var(--bg-focus)';
             } else {
                 statusBadge.innerText = '心流期';
-                statusBadge.style.backgroundColor = 'var(--accent-flow)';
+                statusBadge.style.backgroundColor = 'var(--badge-flow)';
                 statusBadge.style.color = '#FFFFFF';
-                document.body.style.backgroundColor = '#E5ECE9';
+                document.body.style.backgroundColor = 'var(--bg-flow)';
             }
         }
 
@@ -383,6 +432,7 @@
         // --- 狀態轉換控制 ---
         function startFocus() {
             initAudio();
+            stopAudioKeepAlive();
             currentState = STATE.FOCUS;
             startTime = Date.now();
             sessionStartDateTime = new Date(); 
@@ -404,7 +454,7 @@
             const totalMinutes = elapsedSeconds / 60;
 
             if (totalMinutes < 8) {
-                const proceed = confirm("目前處於蓄力期(未滿 8 分鐘)，結束將不計入任何時間。\n\n確定要放棄並結束嗎？\n點擊「取消」可返回繼續蓄力。");
+                const proceed = confirm("目前處於蓄力期(未滿 8 分鐘），結束將不計入任何時間。\n\n確定要放棄並結束嗎？\n點擊「取消」可返回繼續蓄力。");
                 if (!proceed) {
                     currentState = STATE.FOCUS;
                     timerWorker.postMessage('start');
@@ -429,10 +479,13 @@
             breakTotalSeconds = minutes * 60;
             startTime = Date.now();
 
+            // 進入休息期：啟動音訊保活，預置 iPad 背景播放權限
+            startAudioKeepAlive();
+
             statusBadge.innerText = `休息中 (${minutes}m)`;
-            statusBadge.style.backgroundColor = 'var(--accent-sand)';
-            statusBadge.style.color = 'var(--text-main)';
-            document.body.style.backgroundColor = '#F4F1EA';
+            statusBadge.style.backgroundColor = 'var(--badge-break)';
+            statusBadge.style.color = '#FFFFFF';
+            document.body.style.backgroundColor = 'var(--bg-break)'; /* 變更為冰藍色，與專注工作完全區隔 */
 
             btnEndFocus.classList.add('hidden');
             btnSkipBreak.classList.remove('hidden');
@@ -443,12 +496,14 @@
 
         function transitionToAlarm() {
             timerWorker.postMessage('stop');
+            stopAudioKeepAlive(); // 關閉低頻保活音，改播真實鬧鐘
+            
             currentState = STATE.ALARM;
 
             statusBadge.innerText = '休息結束！';
-            statusBadge.style.backgroundColor = '#C27D74';
+            statusBadge.style.backgroundColor = 'var(--badge-alarm)';
             statusBadge.style.color = '#FFFFFF';
-            document.body.style.backgroundColor = '#F7ECEB';
+            document.body.style.backgroundColor = 'var(--bg-alarm)';
             timerDisplay.innerText = "00:00";
 
             btnSkipBreak.classList.add('hidden');
@@ -459,13 +514,14 @@
 
         function resetToIdle() {
             stopAlarmLoop();
+            stopAudioKeepAlive();
             timerWorker.postMessage('stop');
             currentState = STATE.IDLE;
 
             statusBadge.innerText = '準備專注';
-            statusBadge.style.backgroundColor = 'var(--accent-sand)';
+            statusBadge.style.backgroundColor = 'var(--badge-idle)';
             statusBadge.style.color = 'var(--text-main)';
-            document.body.style.backgroundColor = '#F4F1EA';
+            document.body.style.backgroundColor = 'var(--bg-idle)';
             timerDisplay.innerText = "00:00";
 
             btnStartFocus.classList.remove('hidden');
@@ -474,8 +530,7 @@
             btnSkipBreak.classList.add('hidden');
         }
 
-        // --- 時間格式化工具：超過 60 分鐘進位成小時 ---
-        // 用於面板 HTML 渲染 (帶有 span 樣式)
+        // --- 時間進位進階工具 ---
         function formatMinutesToHTML(totalMins) {
             const mins = Math.round(totalMins);
             if (mins >= 60) {
@@ -486,7 +541,6 @@
             return `${mins}<span>m</span>`;
         }
 
-        // 用於純文字清單顯示
         function formatMinutesToText(totalMins) {
             const mins = Math.round(totalMins);
             if (mins >= 60) {
@@ -552,11 +606,9 @@
             const stats = JSON.parse(localStorage.getItem('tree_clock_data')) || {};
             const todayData = stats[today] || { focus: 0, flow: 0, history: [] };
             
-            // 使用新格式化工具：超過 60 分鐘自動渲染為 Xh Ym
             todayFocusEl.innerHTML = formatMinutesToHTML(todayData.focus);
             todayFlowEl.innerHTML = formatMinutesToHTML(todayData.flow);
 
-            // 渲染歷史明細
             historyListEl.innerHTML = '';
             const history = todayData.history || [];
             
